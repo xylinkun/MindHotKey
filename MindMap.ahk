@@ -1278,14 +1278,29 @@ Filt(Arr, lst)
 ; 此递归函数能够将多层嵌套的包裹汉字的圆括号替换为全角形式，有多层嵌套结构时，只能用递归函数实现而不能用一个简单的正则替换实现。
 NormalizeBrackets(strResult)
 {
+    ; 只匹配横向空白，不匹配 `r / `n，避免把选择题选项行错误拼接到上一行。
+    HSPACE := "[\x{2000}-\x{200A}\x{3000} `t]"
+
+    ; 在原来的括号匹配规则外侧增加 HSPACE*。
+    ; 这样将含汉字的半角括号恢复为全角括号时，会同时删除括号外侧的横向空白。
+    pattern := HSPACE "*[(（](?<stringContainsHanInBracket>(?:[^()（）\p{Han}]*[\p{Han}][^()（）\p{Han}]*|(?R))+)[)）]" HSPACE "*"
+
     pos := 1
-	while (pos := RegExMatch(strResult, "[(（](?<stringContainsHanInBracket>(?:[^()（）\p{Han}]*[\p{Han}][^()（）\p{Han}]*|((?R)))+)[)）]", &Match, pos)) {
+    while (pos := RegExMatch(strResult, pattern, &Match, pos)) {
         prefix := SubStr(strResult, 1, Match.Pos - 1)
-        suffix := SubStr(strResult, Match.Pos + StrLen(Match.0))
+        suffix := SubStr(strResult, Match.Pos + Match.Len)
+
         infix := NormalizeBrackets(Match.stringContainsHanInBracket)
-        strResult := Format("{1}（{2}）{3}", prefix, infix, suffix)
-        pos += StrLen(Match.0)
+        newPair := "（" . infix . "）"
+
+        strResult := prefix . newPair . suffix
+
+        ; 不建议继续使用 pos += StrLen(Match.0)
+        ; 因为 Match.0 包含了被删除的外侧空白，替换后长度会变化。
+        ; 用替换后新括号的末尾位置继续搜索更稳。
+        pos := StrLen(prefix) + StrLen(newPair) + 1
     }
+
     return strResult
 }
 ; 初始化数字映射
